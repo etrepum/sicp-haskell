@@ -202,7 +202,7 @@ fixedPoint f = go
         closeEnough a b = abs (a - b) < tolerance
         go x = let next = f x
                in if closeEnough x next
-                  then next
+                  then x
                   else go next
 
 goldenRatioFP :: Double
@@ -287,3 +287,41 @@ compose f g x = f (g x)
 repeated :: (a -> a) -> Int -> (a -> a)
 repeated f 1 = f
 repeated f n = f . repeated f (pred n)
+
+-- 1.44
+smooth :: (Fractional a) => (a -> a) -> (a -> a)
+smooth f x = (f (x - dx) + f x + f (x + dx)) / 3
+  where dx = 0.00001
+
+nsmooth :: (Fractional a) => Int -> (a -> a) -> (a -> a)
+nsmooth n = repeated smooth n
+
+-- 1.45
+average :: (Fractional a) => a -> a -> a
+average x y = (x + y) / 2
+
+averageDamp :: (Fractional a) => (a -> a) -> a -> a
+averageDamp f x = average x (f x)
+
+nthRoot :: Int -> Double -> Double
+nthRoot n x = fixedPoint (dampen f) 1
+  where f y = x / (y ** n')
+        n' = fromIntegral (pred n)
+        dampen = repeated averageDamp log2n
+        log2n = floor (logBase 2 (fromIntegral n))
+
+-- 1.46
+iterativeImprove :: (a -> Bool) -> (a -> a) -> a -> a
+iterativeImprove goodEnough improve = go
+  where go x | goodEnough x = x
+             | otherwise    = go $ improve x
+
+sqrtIterImprove :: Double -> Double
+sqrtIterImprove x = iterativeImprove check next 1.0
+  where check y = abs (x - square y) < 0.001
+        next y = average y (x/y)
+
+fixedPointIterImprove :: (Ord a, Fractional a) => (a -> a) -> a -> a
+fixedPointIterImprove f x0 = iterativeImprove check f x0
+  where tolerance       = 0.00001
+        check x = abs (x - f x) < tolerance
