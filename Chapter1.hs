@@ -3,6 +3,15 @@ import System.Random (randomRIO)
 import Data.List (sort)
 import Debug.Trace
 
+square :: Num a => a -> a
+square x = x * x
+
+cube :: Num a => a -> a
+cube x = x * square x
+
+inc :: (Enum a) => a -> a
+inc = succ
+
 -- 1.3
 sumTwoLargestSquares :: (Num a, Ord a) => a -> a -> a -> a
 sumTwoLargestSquares a b c = sum $ map (\x -> x * x) largest
@@ -14,8 +23,6 @@ newtonCubeRoot guess x | isGoodEnough = guess
                        | otherwise = newtonCubeRoot improved x
   where isGoodEnough = abs (cube guess - x) < 0.001
         improved = ((x / square guess) + 2 * guess) / 3
-        cube = (** 3)
-        square = (** 2)
 
 -- 1.11
 fRecursive :: Integer -> Integer
@@ -85,7 +92,6 @@ expMod :: Integer -> Integer -> Integer -> Integer
 expMod base ex m | ex == 0   = 1
                  | even ex   = square (expMod base (ex `div` 2) m) `mod` m
                  | otherwise = base * expMod base (ex - 1) m `mod` m
-  where square x = x * x
 
 fermatTest :: Integer -> IO Bool
 fermatTest n = do
@@ -105,8 +111,7 @@ expModMR base ex m | ex == 0   = 1
                    | even ex   =
                      failFast $ square (expMod base (ex `div` 2) m) `mod` m
                    | otherwise = base * expMod base (ex - 1) m `mod` m
-  where square x = x * x
-        failFast n = if n == 1 then 1 else 0
+  where failFast n = if n == 1 then 1 else 0
 
 millerRabinTest :: Integer -> IO Bool
 millerRabinTest n = do
@@ -182,7 +187,7 @@ accumulateFilter combiner nullValue term a0 next b fpred = go nullValue a0
 -- With this type signature we can't use the IO monad so we need to implement
 -- a purely function isPrime
 sumPrimeSquares :: Int -> Int -> Int
-sumPrimeSquares a b = accumulateFilter (+) 0 (^2) a succ b fpred
+sumPrimeSquares a b = accumulateFilter (+) 0 square a succ b fpred
   where fpred n0 = let n = fromIntegral n0
                    in n >= 2 && all (\p -> mod n p /= 0) (primesTo (pred n))
 
@@ -255,3 +260,30 @@ tanCF x = contFracIter fn fd
         fn _ = negate x * x
         fd 1 = 1
         fd k = fromIntegral $ k * 2 - 1
+
+-- 1.40
+deriv :: (Fractional a) => (a -> a) -> a -> a
+deriv g x = (g (x + dx) - g x) / dx
+  where dx = 0.00001
+
+newtonsMethod :: (Ord a, Fractional a) => (a -> a) -> a -> a
+newtonsMethod g = fixedPoint newtonTransform
+  where g' = deriv g
+        newtonTransform x = x - g x / g' x
+
+cubic :: Double -> Double -> Double -> Double -> Double
+cubic a b c x = cube x + a * square x + b * x + c
+
+-- 1.41
+double :: (a -> a) -> (a -> a)
+double f = f . f
+
+-- 1.42
+compose :: (b -> c) -> (a -> b) -> (a -> c)
+compose f g x = f (g x)
+-- compose = (.)
+
+-- 1.43
+repeated :: (a -> a) -> Int -> (a -> a)
+repeated f 1 = f
+repeated f n = f . repeated f (pred n)
