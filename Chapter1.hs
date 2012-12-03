@@ -219,14 +219,39 @@ ex1p36 = fixedPointT f 2
   where f x = logBase x 1000
 
 -- 1.37
-contFracRec :: Fractional a => a -> a -> Int -> a
-contFracRec n d = go
-  where go 1         = n / d
-        go k | k > 1 = n / (d + go (k - 1))
-        go _         = undefined
+contFracRec :: Fractional a => (Int -> a) -> (Int -> a) -> Int -> a
+contFracRec fn fd end = go 1
+  where go i = let rest = if i < end
+                          then go (succ i)
+                          else 0
+               in fn i / (fd i + rest)
 
-contFracIter :: Fractional a => a -> a -> Int -> a
-contFracIter n d = go n d
-  where go _   _   !k | k < 1 = undefined
-        go !xn !xd 1          = xn / xd
-        go !xn !xd !k         = go (n * xd) (xd * d + xn) (k - 1)
+contFracIter :: (Fractional a) => (Int -> a) -> (Int -> a) -> Int -> a
+contFracIter fn fd = go 0 1
+  where go !xn !xd !i = let x = xn/xd
+                        in if i < 1
+                           then x
+                           else go (fn i) (x + fd i) (pred i)
+
+-- 1.38
+eMinus2Approx :: Int -> Double
+eMinus2Approx = contFracRec (const 1) fd
+  where fd i = let i1 = succ i
+               in if i1 `mod` 3 == 0
+                  then fromIntegral (2 * div i1 3)
+                  else 1
+
+eMinus2Approx1 :: Int -> Double
+eMinus2Approx1 = contFracIter (const 1) fd
+  where fd i = let i1 = succ i
+               in if i1 `mod` 3 == 0
+                  then fromIntegral (2 * div i1 3)
+                  else 1
+
+-- 1.39
+tanCF :: Double -> Int -> Double
+tanCF x = contFracIter fn fd
+  where fn 1 = x
+        fn _ = negate x * x
+        fd 1 = 1
+        fd k = fromIntegral $ k * 2 - 1
