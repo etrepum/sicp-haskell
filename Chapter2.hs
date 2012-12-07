@@ -112,3 +112,77 @@ cTwo :: ChurchN a
 cTwo f x = f (f x)
 cAdd :: ChurchN a -> ChurchN a -> ChurchN a
 cAdd a b f x = b f (a f x)
+
+-- 2.7 through 2.16
+
+data Interval = Interval { lowerBound :: Double
+                         , upperBound :: Double
+                         }
+  deriving (Show)
+
+makeInterval :: Double -> Double -> Interval
+makeInterval a b | a <= b    = Interval a b
+                 | otherwise = Interval b a
+
+pairsInterval :: Interval -> Interval -> [(Double, Double)]
+pairsInterval (Interval l0 h0) (Interval l1 h1) = [ (l0, l1)
+                                                  , (l0, h1)
+                                                  , (h0, l1)
+                                                  , (h0, h1)
+                                                  ]
+
+minmax :: Ord a => [a] -> (a, a)
+minmax l = (minimum l, maximum l)
+
+opInterval :: (Double -> Double -> Double) -> Interval -> Interval -> Interval
+opInterval op a b = uncurry makeInterval . minmax . map (uncurry op) $ pairs
+  where pairs = pairsInterval a b
+
+addInterval :: Interval -> Interval -> Interval
+addInterval = opInterval (+)
+
+mulInterval :: Interval -> Interval -> Interval
+mulInterval = opInterval (*)
+
+recipInterval :: Interval -> Interval
+recipInterval (Interval l h) | l <= 0 && h >= 0 = recipError
+                             | otherwise        = makeInterval (1/h) (1/l)
+
+divInterval :: Interval -> Interval -> Interval
+divInterval a b = a `mulInterval` recipInterval b
+
+-- 2.8
+subInterval :: Interval -> Interval -> Interval
+subInterval = opInterval (-)
+
+-- 2.10, see recipInterval implementation
+recipError :: a
+recipError = error "Reciprocal of interval spanning 0 is undefined"
+
+makeCenterWidth :: Double -> Double -> Interval
+makeCenterWidth c w = makeInterval (c - w) (c + w)
+
+centerInterval :: Interval -> Double
+centerInterval (Interval l h) = (l + h) / 2
+
+widthInterval :: Interval -> Double
+widthInterval (Interval l h) = (h - l) / 2
+
+-- 2.12
+makeCenterPercent :: Double -> Double -> Interval
+makeCenterPercent c p = makeCenterWidth c (abs (c * p))
+
+percentInterval :: Interval -> Double
+percentInterval a = widthInterval a / centerInterval a
+
+-- 2.17
+lastPair :: [a] -> [a]
+lastPair l@(_:t) | null t    = l
+                 | otherwise = lastPair t
+lastPair _ = undefined
+
+-- 2.18
+listReverse :: [a] -> [a]
+listReverse = go []
+  where go !acc (h:t) = go (h:acc) t
+        go !acc _     = acc
