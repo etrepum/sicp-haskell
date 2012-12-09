@@ -1,5 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 import qualified Data.Ratio as R
+import Control.Monad (guard)
+import Data.List (sort)
 
 -- 2.1
 data Rat = Rat Integer Integer
@@ -186,3 +188,188 @@ listReverse :: [a] -> [a]
 listReverse = go []
   where go !acc (h:t) = go (h:acc) t
         go !acc _     = acc
+
+-- 2.19
+usCoins :: (Ord a, Fractional a) => [a]
+usCoins = [50, 25, 10, 5, 1]
+ukCoins :: (Ord a, Fractional a) => [a]
+ukCoins = [100, 50, 20, 10, 5, 2, 1, 0.5]
+
+countChange :: (Ord a, Fractional a) => [a] -> a -> a
+countChange cvs@(cv:rest) amount | amount > 0 =
+  countChange rest amount + countChange cvs (amount - cv)
+countChange _ 0 = 1
+countChange _ _ = 0
+
+-- 2.21
+squareList1 :: Num a => [a] -> [a]
+squareList1 (h:t) = h * h:squareList1 t
+squareList1 [] = []
+
+squareList2 :: Num a => [a] -> [a]
+squareList2 = map (\x -> x * x)
+
+-- 2.23, basically in the spirit of the scheme for-each. Equivalent to mapM_.
+forEach :: (a -> IO b) -> [a] -> IO ()
+forEach _ [] = return ()
+forEach f (h:t) = f h >> forEach f t
+
+-- 2.28
+-- At this point we need to skip a number of exercises and diverge a bit
+-- because heterogeneous lists simply don't exist in Haskell.
+data Tree a = TBranch [Tree a]
+            | TLeaf a
+            deriving (Show)
+
+-- h> fringe (TBranch [TBranch [TLeaf 1, TLeaf 2], TBranch [TLeaf 3, TLeaf 4]])
+-- [1,2,3,4]
+fringe :: Tree a -> [a]
+fringe (TLeaf a) = [a]
+fringe (TBranch xs) = concatMap fringe xs
+
+-- 2.29
+data BMobile = BMobile { bLeftBranch :: BBranch
+                       , bRightBranch :: BBranch
+                       }
+               deriving (Show)
+data BBranch = BBranch { bLength :: Double
+                       , bStructure :: BStructure
+                       }
+               deriving (Show)
+data BStructure = BSWeight { bsWeight :: Double }
+                | BSMobile { bsMobile :: BMobile }
+               deriving (Show)
+
+totalWeight :: BMobile -> Double
+totalWeight m = branchWeight (bLeftBranch m) + branchWeight (bRightBranch m)
+  where branchWeight = structureWeight . bStructure
+        structureWeight (BSWeight w) = w
+        structureWeight (BSMobile m1) = totalWeight m1
+
+isBalanced :: BMobile -> Bool
+isBalanced = maybe False (const True) . go
+  where go (BMobile l r) = do
+          (lw, ll) <- torque l
+          (rw, rl) <- torque r
+          guard $ lw * ll == rw * rl
+          return $ lw + rw
+        torque (BBranch l (BSWeight w)) = return (l, w)
+        torque (BBranch l (BSMobile m)) = fmap ((,) l) (go m)
+
+-- 2.30
+squareTree1 :: Num a => Tree a -> Tree a
+squareTree1 (TLeaf x) = TLeaf $ x * x
+squareTree1 (TBranch bs) = TBranch $ go bs
+  where go (x:xs) = squareTree1 x:go xs
+        go []     = []
+
+squareTree2 :: Num a => Tree a -> Tree a
+squareTree2 (TBranch xs) = TBranch $ map squareTree2 xs
+squareTree2 (TLeaf x) = TLeaf (x * x)
+
+-- 2.31
+treeMap :: (a -> b) -> Tree a -> Tree b
+treeMap f = go
+  where go (TLeaf x)    = TLeaf $ f x
+        go (TBranch xs) = TBranch $ map go xs
+
+squareTree3 :: Num a => Tree a -> Tree a
+squareTree3 = treeMap (\x -> x * x)
+
+-- 2.32
+{-
+Given s(A) as the set of all subsets of A, and an element b we can define
+s(A \/ {b}) as s(A) \/ {A' \/ {b} for all A' in s(A)}.
+
+The subsets function starts with the definition for empty sets s({}) = {{}}
+and is recursively evaluated with each element of A to build s(A).
+-}
+subsets :: [a] -> [[a]]
+subsets (h:t) = let rest = subsets t
+                in rest ++ map (h:) rest
+subsets []    = [[]]
+
+-- 2.33
+
+-- Otherwise known as foldr
+accumulate :: (a -> b -> b) -> b -> [a] -> b
+accumulate op initial = go
+  where go (h:t) = op h $ go t
+        go []    = initial
+
+pMap :: (a -> b) -> [a] -> [b]
+pMap p xs = accumulate op [] xs
+  where op x acc = p x:acc
+
+pAppend :: [a] -> [a] -> [a]
+pAppend a b = accumulate (:) b a
+
+pLength :: [a] -> Int
+pLength = accumulate op 0
+  where op _ acc = 1 + acc
+
+-- 2.34
+hornerEval :: Num a => a -> [a] -> a
+hornerEval x = accumulate op 0
+  where op a acc = a + acc * x
+
+-- 2.35
+countLeaves :: Tree a -> Int
+countLeaves = length . fringe
+
+-- 2.36
+accumulateN :: (a -> b -> b) -> b -> [[a]] -> [b]
+accumulateN f initial seqs | null (head seqs) = []
+                           | otherwise        =
+  accumulate f initial (map head seqs):accumulateN f initial (map tail seqs)
+
+-- 2.37
+type Vec a = [a]
+type Mat a = [Vec a]
+dotProduct :: Num a => Vec a -> Vec a -> a
+dotProduct v w = accumulate (+) 0 (zipWith (*) v w)
+
+matrixMulVector :: Num a => Mat a -> Vec a -> Vec a
+matrixMulVector m v = map (sum . zipWith (*) v) m
+
+matrixMulMatrix :: Num a => Mat a -> Mat a -> Mat a
+matrixMulMatrix m n = let cols = matrixTranspose n
+                      in map (matrixMulVector cols) m
+
+matrixTranspose :: Mat a -> Mat a
+matrixTranspose = accumulateN (:) []
+
+-- 2.39
+reverseR :: [a] -> [a]
+reverseR = foldr (\x acc -> acc ++ [x]) []
+
+reverseL :: [a] -> [a]
+reverseL = foldl (flip (:)) []
+
+-- 2.40
+uniquePairs :: Integral a => a -> [(a, a)]
+uniquePairs n = concatMap (\j -> map ((,) j) [j+1..n]) [1..n-1]
+
+primesTo :: Integral a => a -> [a]
+primesTo m | m < 2     = []
+           | otherwise = 2 : eratos [3,5..m]  where
+   eratos []     = []
+   eratos (p:xs) = p : eratos (xs `minus` [p, p+2*p..m])
+   minus (x:xs) (y:ys) = case compare x y of
+     LT -> x : minus  xs  (y:ys)
+     EQ ->     minus  xs     ys
+     GT ->     minus (x:xs)  ys
+   minus  xs     _     = xs
+
+primeSumPairs :: Integer -> [(Integer, Integer)]
+primeSumPairs n = filter f (uniquePairs n)
+  where f = flip elem primes . uncurry (+)
+        primes = primesTo n
+
+-- 2.41
+orderedTriples :: Integral a => a -> a -> [(a, a, a)]
+orderedTriples n s = [(i,j,k)
+                     | i <- [1..n-2],
+                       j <- [i+1..n-1],
+                       k <- [i+2..n],
+                       i + j + k == s]

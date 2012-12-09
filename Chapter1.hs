@@ -185,7 +185,7 @@ accumulateFilter combiner nullValue term a0 next b fpred = go nullValue a0
                                in go n1 (next a)
 
 -- With this type signature we can't use the IO monad so we need to implement
--- a purely function isPrime
+-- a purely functional isPrime
 sumPrimeSquares :: Int -> Int -> Int
 sumPrimeSquares a b = accumulateFilter (+) 0 square a succ b fpred
   where fpred n0 = let n = fromIntegral n0
