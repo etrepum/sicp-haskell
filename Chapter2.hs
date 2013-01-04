@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 import qualified Data.Ratio as R
 import Control.Monad (guard)
-import Data.List (sort)
 
 -- 2.1
 data Rat = Rat Integer Integer
@@ -373,3 +372,28 @@ orderedTriples n s = [(i,j,k)
                        j <- [i+1..n-1],
                        k <- [i+2..n],
                        i + j + k == s]
+
+-- 2.42
+queens :: (Show a, Integral a) => a -> [[a]]
+queens n = let
+  queenCols k | k == 0    = emptyBoard
+              | otherwise = filter
+                              (\positions -> isSafe k positions)
+                              (concatMap
+                                 (\restOfQueens ->
+                                   map
+                                     (\newRow ->
+                                       adjoinPosition
+                                         newRow k restOfQueens)
+                                     [1..n])
+                                 (queenCols (k - 1)))
+  emptyBoard = [[]]
+  adjoinPosition row _col rest = row:rest
+  isSafe k positions = all (safe p) ps
+    where (p:ps) = zip [k,k-1..1] positions
+          -- unsafe if slope is vertical, horizontal, 1, or -1
+          -- dx is guaranteed to be non-zero given the enumeration
+          safe (c1,r1) (c2,r2) = dy /= 0 && abs dy /= abs dx
+            where dy = r2 - r1
+                  dx = c2 - c1
+  in queenCols n
