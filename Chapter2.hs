@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 import qualified Data.Ratio as R
 import Control.Monad (guard)
+import Data.Monoid (mappend)
 
 -- 2.1
 data Rat = Rat Integer Integer
@@ -397,3 +398,214 @@ queens n = let
             where dy = r2 - r1
                   dx = c2 - c1
   in queenCols n
+
+-- Painters and frames
+type Vector = (Double, Double)
+data Frame = Frame { frameOrigin  :: Vector
+                   , frameEdge1 :: Vector
+                   , frameEdge2 :: Vector
+                   }
+type Painter = Frame -> [Seg]
+
+
+unitFrame :: Frame
+unitFrame = makeFrame (0, 0) (1, 0) (0, 1)
+
+makeFrame :: Vector -> Vector -> Vector -> Frame
+makeFrame = Frame
+
+frameCoordMap :: Frame -> Vector -> Vector
+frameCoordMap (Frame origin edge1 edge2) v = origin `vectorAdd` scaled
+  where scaled = v1 `vectorAdd` v2
+        v1 = xCor v `vectorScale` edge1
+        v2 = yCor v `vectorScale` edge2
+
+makeRelativeFrame :: Vector -> Vector -> Vector -> Frame -> Frame
+makeRelativeFrame origin edge1 edge2 f = makeFrame o (s edge1) (s edge2)
+  where m = frameCoordMap f
+        o = m origin
+        s v = vectorSub (m v) o
+
+transformPainter :: Vector -> Vector -> Vector -> Painter -> Painter
+transformPainter o e1 e2 p = p . makeRelativeFrame o e1 e2
+
+repeated :: Int -> (a -> a) -> (a -> a)
+repeated n f | n > 0     = (!! pred n) . iterate f
+             | otherwise = error "n must be >= 1"
+
+rotate90 :: Painter -> Painter
+rotate90 = transformPainter (1, 0) (1, 1) (0, 0)
+
+rotate180 :: Painter -> Painter
+rotate180 = repeated 2 rotate90
+
+rotate270 :: Painter -> Painter
+rotate270 = repeated 3 rotate90
+
+superpose :: Painter -> Painter -> Painter
+superpose p1 p2 f = p1 f `mappend` p2 f
+
+flipVert :: Painter -> Painter
+flipVert = transformPainter (0, 1) (1, 1) (0, 0)
+
+beside :: Painter -> Painter -> Painter
+beside p1 p2 = t1 p1 `superpose` t2 p2
+  where t1 = transformPainter (0.0, 0.0) (0.5, 0.0) (0.0, 1.0)
+        t2 = transformPainter (0.5, 0.0) (1.0, 0.0) (0.5, 1.0)
+
+rightSplit :: Painter -> Int -> Painter
+rightSplit = split beside below
+
+upSplit :: Painter -> Int -> Painter
+upSplit = split below beside
+
+cornerSplit :: Painter -> Int -> Painter
+cornerSplit p 0 = p
+cornerSplit p n = beside (below p topLeft) (below bottomRight corner)
+ where up          = upSplit p n'
+       right       = rightSplit p n'
+       topLeft     = beside up up
+       bottomRight = below right right
+       corner      = cornerSplit p n'
+       n'          = pred n
+
+segPainter :: [Seg] -> Frame -> [Seg]
+segPainter xs frame = map f xs
+  where m = frameCoordMap frame
+        f (Seg a b) = Seg (m a) (m b)
+
+-- 2.44
+upSplit' :: Painter -> Int -> Painter
+upSplit' p 0 = p
+upSplit' p n = below p (beside smaller smaller)
+  where smaller = upSplit' p (pred n)
+
+-- 2.45
+split :: (Painter -> Painter -> Painter)
+         -> (Painter -> Painter -> Painter)
+         -> Painter
+         -> Int
+         -> Painter
+split f1 f2 p = go
+  where go 0 = p
+        go n = let smaller = go (pred n)
+               in f1 p (f2 smaller smaller)
+
+-- 2.46
+makeVect :: Double -> Double -> Vector
+makeVect = (,)
+
+vectorAdd :: Vector -> Vector -> Vector
+vectorAdd (x1, y1) (x2, y2) = (x1 + x2, y1 + y2)
+
+vectorSub :: Vector -> Vector -> Vector
+vectorSub (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
+
+vectorScale :: Double -> Vector -> Vector
+vectorScale s (x, y) = (s * x, s * y)
+
+xCor :: Vector -> Double
+xCor = fst
+
+yCor :: Vector -> Double
+yCor = snd
+
+-- 2.47, not so interesting in Haskell
+-- 2.48
+-- Segment is already used in this file
+data Seg = Seg { segStart :: Vector
+               , segEnd   :: Vector
+               }
+         deriving (Eq, Show)
+-- 2.49
+path :: [Vector] -> [Seg]
+path (a:bs@(b:_)) = Seg a b:path bs
+path _            = []
+
+segFrame :: Painter
+segFrame = segPainter $ path [ (0, 0)
+                             , (1, 0)
+                             , (1, 1)
+                             , (0, 1)
+                             , (0, 0)
+                             ]
+
+segX :: Painter
+segX = segPainter [ Seg (0, 0) (1, 1)
+                  , Seg (0, 1) (1, 0)]
+
+segDiamond :: Painter
+segDiamond = segPainter $ path [ (0.5, 0)
+                        , (1, 0.5)
+                        , (0.5, 1)
+                        , (0, 0.5)
+                        , (0.5, 0)
+                        ]
+
+-- from http://jots-jottings.blogspot.com/2011/10/sicp-exercise-249-primitive-painters.html
+segWave :: Painter
+segWave = segPainter $ concat [ path [ (0.00, 0.85)
+                                     , (0.15, 0.60)
+                                     , (0.30, 0.65)
+                                     , (0.40, 0.65)
+                                     , (0.35, 0.85)
+                                     , (0.40, 1.00)
+                                     ]
+                              , path [ (0.60, 1.00)
+                                     , (0.65, 0.85)
+                                     , (0.60, 0.65)
+                                     , (0.75, 0.65)
+                                     , (1.00, 0.35)
+                                     ]
+                              , path [ (1.00, 0.15)
+                                     , (0.60, 0.45)
+                                     , (0.75, 0.00)
+                                     ]
+                              , path [ (0.60, 0.00)
+                                     , (0.50, 0.30)
+                                     , (0.40, 0.00)
+                                     ]
+                              , path [ (0.25, 0.00)
+                                     , (0.35, 0.50)
+                                     , (0.30, 0.60)
+                                     , (0.15, 0.40)
+                                     , (0.00, 0.65)
+                                     ]
+                              ]
+
+-- 2.50
+flipHoriz :: Painter -> Painter
+flipHoriz = transformPainter (1, 0) (0, 0) (1, 1)
+
+-- 2.51
+below :: Painter -> Painter -> Painter
+below p1 p2 = t1 p1 `superpose` t2 p2
+  where t1 = transformPainter (0, 0.0) (1, 0.0) (0, 0.5)
+        t2 = transformPainter (0, 0.5) (1, 0.5) (0, 1.0)
+
+below' :: Painter -> Painter -> Painter
+below' p1 p2 = rotate270 (rotate90 p1 `beside` rotate90 p2)
+
+-- 2.52
+segWaveSmile :: Painter
+segWaveSmile = segWave `superpose` smile
+  where smile = segPainter $ concat [ path [ (0.40, 0.90)
+                                           , (0.45, 0.90)
+                                           , (0.45, 0.85)
+                                           , (0.40, 0.85)
+                                           , (0.40, 0.90)
+                                           ]
+                                    , path [ (0.55, 0.90)
+                                           , (0.60, 0.90)
+                                           , (0.60, 0.85)
+                                           , (0.55, 0.85)
+                                           , (0.55, 0.90)
+                                           ]
+                                    , path [ (0.40, 0.75)
+                                           , (0.45, 0.70)
+                                           , (0.55, 0.70)
+                                           , (0.60, 0.75)
+                                           ]
+                                    ]
+
+-- TODO square-limit, Text.Blaze.Svg
