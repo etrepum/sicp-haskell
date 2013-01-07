@@ -1,7 +1,12 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings #-}
 import qualified Data.Ratio as R
 import Control.Monad (guard)
 import Data.Monoid (mappend)
+import Text.Blaze.Svg11 ((!))
+--import Data.String (fromString)
+import qualified Text.Blaze.Svg11 as S
+import qualified Text.Blaze.Svg11.Attributes as A
+import Text.Blaze.Svg.Renderer.String (renderSvg)
 
 -- 2.1
 data Rat = Rat Integer Integer
@@ -430,7 +435,7 @@ transformPainter :: Vector -> Vector -> Vector -> Painter -> Painter
 transformPainter o e1 e2 p = p . makeRelativeFrame o e1 e2
 
 repeated :: Int -> (a -> a) -> (a -> a)
-repeated n f | n > 0     = (!! pred n) . iterate f
+repeated n f | n > 0     = (!! n) . iterate f
              | otherwise = error "n must be >= 1"
 
 rotate90 :: Painter -> Painter
@@ -473,6 +478,20 @@ segPainter :: [Seg] -> Frame -> [Seg]
 segPainter xs frame = map f xs
   where m = frameCoordMap frame
         f (Seg a b) = Seg (m a) (m b)
+
+squareOfFour :: (Painter -> Painter)
+                -> (Painter -> Painter)
+                -> (Painter -> Painter)
+                -> (Painter -> Painter)
+                -> Painter
+                -> Painter
+squareOfFour tl tr bl br p = bottom `below` top
+  where top    = tl p `beside` tr p
+        bottom = bl p `beside` br p
+
+squareLimit :: Painter -> Int -> Painter
+squareLimit p n = combine4 $ cornerSplit p n
+  where combine4 = squareOfFour flipHoriz id rotate180 flipVert
 
 -- 2.44
 upSplit' :: Painter -> Int -> Painter
@@ -608,4 +627,20 @@ segWaveSmile = segWave `superpose` smile
                                            ]
                                     ]
 
--- TODO square-limit, Text.Blaze.Svg
+svgDoc :: S.Svg -> S.Svg
+svgDoc = S.docTypeSvg ! A.version "1.1" !
+         A.width "500" ! A.height "500" !
+         A.viewbox "0 0 500 500"
+
+paintSVG :: Painter -> String
+paintSVG p = renderSvg $ svgDoc (segsToSvgPath segs)
+  where segs = flipVert p $ makeFrame (0, 0) (500, 0) (0, 500)
+
+segsToSvgPath :: [Seg] -> S.Svg
+segsToSvgPath segs = S.path !
+                     A.stroke "black" !
+                     A.strokeWidth "1" !
+                     A.fill "none" !
+                     A.d attr
+  where attr = S.mkPath $ mapM_ f segs
+        f (Seg (x1, y1) (x2, y2)) = S.m x1 y1 >> S.l x2 y2
