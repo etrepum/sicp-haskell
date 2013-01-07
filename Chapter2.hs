@@ -644,3 +644,178 @@ segsToSvgPath segs = S.path !
                      A.d attr
   where attr = S.mkPath $ mapM_ f segs
         f (Seg (x1, y1) (x2, y2)) = S.m x1 y1 >> S.l x2 y2
+
+-- 2.53, 2.54, 2.55 - quotation doesn't make much sense in Haskell
+-- without getting into Template Haskell
+
+-- Implementation of 2.56, 2.57, 2.58 using types instead of quotations
+type Var = Char
+data Expr a = Variable Var
+            | (Expr a) :+: (Expr a)
+            | (Expr a) :*: (Expr a)
+            | (Expr a) :**: (Expr a)
+            | Number a
+  deriving (Eq, Show)
+
+makeSum :: (Num a, Eq a, Ord a) => Expr a -> Expr a -> Expr a
+makeSum (Number a) (Number b) = Number (a + b)
+makeSum x (Number 0) = x
+makeSum (Number 0) y = y
+makeSum x y = x :+: y
+
+makeProd :: (Num a, Eq a, Ord a) => Expr a -> Expr a -> Expr a
+makeProd (Number a) (Number b) = Number (a * b)
+makeProd _ (Number 0) = Number 0
+makeProd (Number 0) _ = Number 0
+makeProd x (Number 1) = x
+makeProd (Number 1) y = y
+makeProd x y          = x :*: y
+
+makeExp :: (Num a, Eq a, Ord a) => Expr a -> Expr a -> Expr a
+makeExp (Number 0) (Number b) | b > 0 = Number 0
+makeExp (Number 1) _ = Number 1
+makeExp _ (Number 0) = Number 1
+makeExp x (Number 1) = x
+makeExp x y          = x :**: y
+
+-- 2.56
+deriv :: (Num a, Eq a, Ord a) => Expr a -> Var -> Expr a
+deriv a b = go a
+  where go (Number _)   = Number 0
+        go (Variable x) = Number (if x == b then 1 else 0)
+        go (x :+: y)    = go x `makeSum` go y
+        go (x :*: y)    = (x `makeProd` go y) `makeSum` (go x `makeProd` y)
+        go (x :**: y) = (y `makeProd` x) `makeExp` (y `makeSum` Number (-1))
+
+-- 2.57, arbitrary arguments aren't really the way in haskell. Only
+-- makes sense if we are doing a DSL or something like that.
+-- 2.58, also doesn't make a lot of sense without a parser or template haskell
+
+-- 2.59
+newtype LSet a = LSet [a]
+                deriving (Show)
+elementOfLSet :: Eq a => a -> LSet a -> Bool
+elementOfLSet x (LSet set) = x `elem` set
+
+adjoinLSet :: Eq a => a -> LSet a -> LSet a
+adjoinLSet x set@(LSet xs) | elementOfLSet x set = set
+                           | otherwise           = LSet (x:xs)
+
+intersectionLSet :: Eq a => LSet a -> LSet a -> LSet a
+intersectionLSet (LSet xs) b = LSet (filter (flip elementOfLSet b) xs)
+
+unionLSet :: Eq a => LSet a -> LSet a -> LSet a
+unionLSet (LSet xs) b = foldr adjoinLSet b xs
+
+-- 2.60
+-- Not as memory efficient, you'd use it when duplicates are unlikely and
+-- adjoin or union is a common operation
+newtype LDSet a = LDSet [a]
+                deriving (Show)
+elementOfLDSet :: Eq a => a -> LDSet a -> Bool
+elementOfLDSet x (LDSet set) = x `elem` set
+
+adjoinLDSet :: Eq a => a -> LDSet a -> LDSet a
+adjoinLDSet a (LDSet set) = LDSet (a:set)
+
+intersectionLDSet :: Eq a => LDSet a -> LDSet a -> LDSet a
+intersectionLDSet (LDSet xs) b = LDSet (filter (flip elementOfLDSet b) xs)
+
+unionLDSet :: Eq a => LDSet a -> LDSet a -> LDSet a
+unionLDSet (LDSet xs) b = foldr adjoinLDSet b xs
+
+-- 2.61
+newtype LOSet a = LOSet [a]
+                deriving (Show)
+
+elementOfLOSet :: (Ord a) => a -> LOSet a -> Bool
+elementOfLOSet a (LOSet (x:xs)) | x < a     = elementOfLOSet a (LOSet xs)
+                                | otherwise = a == x
+elementOfLOSet _ (LOSet []) = False
+
+-- 2.61
+adjoinLOSet :: Ord a => a -> LOSet a -> LOSet a
+adjoinLOSet a (LOSet xs0) = LOSet (go xs0)
+  where go (x:xs) | x < a     = x:go xs
+                  | x == a    = x:xs
+                  | otherwise = a:x:xs
+        go []                 = [a]
+
+intersectionLOSet :: Ord a => LOSet a -> LOSet a -> LOSet a
+intersectionLOSet (LOSet xs0) (LOSet ys0) = LOSet (go xs0 ys0)
+  where go xs@(x:xs') ys@(y:ys') | x < y     = go xs' ys
+                                 | x == y    = x:go xs' ys'
+                                 | otherwise = go xs ys'
+        go _ _ = []
+
+-- 2.62
+unionLOSet :: Ord a => LOSet a -> LOSet a -> LOSet a
+unionLOSet (LOSet xs0) (LOSet ys0) = LOSet (go xs0 ys0)
+  where go xs@(x:xs') ys@(y:ys') | x < y     = x:go xs' ys
+                                 | x == y    = x:go xs' ys'
+                                 | otherwise = y:go xs  ys'
+        go xs []  = xs
+        go [] ys  = ys
+
+-- 2.63
+data TSet a = TSet a (TSet a) (TSet a)
+            | TNil
+            deriving (Show)
+
+makeTree :: Ord a => a -> TSet a -> TSet a -> TSet a
+makeTree = TSet
+
+elementOfTSet :: Ord a => a -> TSet a -> Bool
+elementOfTSet _ TNil = False
+elementOfTSet x (TSet y l r) | x == y    = True
+                             | x < y     = elementOfTSet x l
+                             | otherwise = elementOfTSet x r
+
+adjoinTSet :: Ord a => a -> TSet a -> TSet a
+adjoinTSet x TNil                    = makeTree x TNil TNil
+adjoinTSet x s@(TSet y l r) | x == y    = s
+                            | x < y     = makeTree y (adjoinTSet x l) r
+                            | otherwise = makeTree y l (adjoinTSet x r)
+
+
+-- performance is bad because of append
+treeList1 :: Ord a => TSet a -> [a]
+treeList1 TNil = []
+treeList1 (TSet x l r) = treeList1 l ++ x:treeList1 r
+
+-- results are the same but performance is O(N)
+treeList2 :: Ord a => TSet a -> [a]
+treeList2 = flip go []
+  where go TNil acc         = acc
+        go (TSet x l r) acc = let !xs = go r acc
+                              in go l (x:xs)
+
+-- 2.64
+listTree :: Ord a => [a] -> TSet a
+listTree xs = fst (partialTree xs (length xs))
+
+{-
+partialTree works by recursively dividing an
+ordered list into left and right halves with
+a median pivot element. This algorithm will
+generate a balanced tree from an ordered list
+in O(N) steps.
+-}
+partialTree :: Ord a => [a] -> Int -> (TSet a, [a])
+partialTree xs 0 = (TNil, xs)
+partialTree xs n = (TSet x lt rt, rxs)
+  where leftSize  = pred n `div` 2
+        rightSize = n - succ leftSize
+        (lt, x:lxs) = partialTree xs  leftSize
+        (rt, rxs)   = partialTree lxs rightSize
+
+-- 2.65
+{-
+walkTree :: Ord a => TSet a -> [a] -> [a]
+walkTree TNil acc         = acc
+walkTree (TSet x l r) acc = let !xs = walkTree r acc
+                            in walkTree l (x:xs)
+
+unionTSet :: Ord a => TSet a -> TSet a -> TSet a
+intersectionTSet :: Ord a => TSet a -> TSet a -> TSet a
+-}
