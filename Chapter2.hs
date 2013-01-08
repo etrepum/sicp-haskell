@@ -784,8 +784,8 @@ treeList1 TNil = []
 treeList1 (TSet x l r) = treeList1 l ++ x:treeList1 r
 
 -- results are the same but performance is O(N)
-treeList2 :: Ord a => TSet a -> [a]
-treeList2 = flip go []
+treeList :: Ord a => TSet a -> [a]
+treeList = flip go []
   where go TNil acc         = acc
         go (TSet x l r) acc = let !xs = go r acc
                               in go l (x:xs)
@@ -810,12 +810,14 @@ partialTree xs n = (TSet x lt rt, rxs)
         (rt, rxs)   = partialTree lxs rightSize
 
 -- 2.65
-{-
-walkTree :: Ord a => TSet a -> [a] -> [a]
-walkTree TNil acc         = acc
-walkTree (TSet x l r) acc = let !xs = walkTree r acc
-                            in walkTree l (x:xs)
-
 unionTSet :: Ord a => TSet a -> TSet a -> TSet a
+unionTSet a b = listTree xs
+  where sa = LOSet (treeList a)
+        sb = LOSet (treeList b)
+        LOSet xs = unionLOSet sa sb
+
 intersectionTSet :: Ord a => TSet a -> TSet a -> TSet a
--}
+intersectionTSet a b = listTree xs
+  where sa = LOSet (treeList a)
+        sb = LOSet (treeList b)
+        LOSet xs = intersectionLOSet sa sb
